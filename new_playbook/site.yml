@@ -1,0 +1,69 @@
+---
+- name: Install Clickhouse
+  hosts: clickhouse
+  handlers:
+    - name: Start clickhouse service
+      become: true
+      ansible.builtin.service:
+        name: clickhouse-server
+        state: restarted
+  tasks:
+    - block:
+        - name: Get clickhouse distrib
+          ansible.builtin.get_url:
+            url: "https://packages.clickhouse.com/rpm/stable/{{ item }}-{{ clickhouse_version }}.noarch.rpm"
+            dest: "./{{ item }}-{{ clickhouse_version }}.rpm"
+          with_items: "{{ clickhouse_packages }}"
+      rescue:
+        - name: Get clickhouse distrib
+          ansible.builtin.get_url:
+            url: "https://packages.clickhouse.com/rpm/stable/clickhouse-common-static-{{ clickhouse_version }}.x86_64.rpm"
+            dest: "./clickhouse-common-static-{{ clickhouse_version }}.rpm"
+    - name: Install clickhouse packages
+      become: true
+      ansible.builtin.yum:
+        name:
+          - clickhouse-common-static-{{ clickhouse_version }}.rpm
+          - clickhouse-client-{{ clickhouse_version }}.rpm
+          - clickhouse-server-{{ clickhouse_version }}.rpm
+      notify: Start clickhouse service
+    - block:
+        - name: Get vector distrib
+          ansible.builtin.get_url:
+            url: "https://packages.timber.io/vector/0.21.0/vector-0.21.0-1.x86_64.rpm"
+            dest: "."
+      rescue:
+        - name: Get vector distrib
+          ansible.builtin.get_url:
+            url: "https://packages.timber.io/vector/0.21.0/vector-0.21.0-1.x86_64.rpm"
+            dest: "."
+    - block:
+        - name: Get libs1 distrib
+          ansible.builtin.get_url:
+            url: "http://mirror.ghettoforge.org/distributions/gf/el/7/gf/x86_64/gcc10-libstdc++-10.2.1-7.gf.el7.x86_64.rpm"
+            dest: "."
+    - name: Install lib1 package
+      become: true
+      ansible.builtin.yum:
+        name:
+          - gcc10-libstdc++-10.2.1-7.gf.el7.x86_64.rpm
+    - block:
+        - name: Get libs2 distrib
+          ansible.builtin.get_url:
+            url: "	http://mirror.centos.org/centos/7/os/x86_64/Packages/glibc-2.17-317.el7.x86_64.rpm"
+            dest: "."          
+    - name: Install lib2 package
+      become: true
+      ansible.builtin.yum:
+        name:
+          - glibc-2.17-317.el7.x86_64.rpm                      
+    - name: Install vector package
+      become: true
+      ansible.builtin.yum:
+        name:
+          - vector-0.21.0-1.x86_64.rpm
+    - name: Create database
+      ansible.builtin.command: "clickhouse-client -q 'CREATE DATABASE LOGS'"
+      register: create_db
+      failed_when: create_db.rc != 0 and create_db.rc !=82
+      changed_when: create_db.rc == 0
